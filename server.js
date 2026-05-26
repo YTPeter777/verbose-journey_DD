@@ -10,7 +10,6 @@ const config = {
 
 const app = express();
 const client = new line.Client(config);
-
 const serviceAccountAuth = new JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
@@ -18,44 +17,48 @@ const serviceAccountAuth = new JWT({
 });
 
 app.post('/callback', line.middleware(config), (req, res) => {
-    Promise.all(req.body.events.map(handleEvent))
-        .then((result) => res.json(result))
-        .catch((err) => { 
-            console.error('Callback 錯誤:', err); 
-            res.status(500).end(); 
-        });
+    Promise.all(req.body.events.map(handleEvent)).then((r) => res.json(r)).catch((e) => { console.error(e); res.status(500).end(); });
 });
 
 async function handleEvent(event) {
+    // 歡迎事件：新用戶加入時
+    if (event.type === 'follow') {
+        return client.replyMessage(event.replyToken, { type: 'text', text: '歡迎加入美食管家！請點選選單或輸入「吃什麼」來開始吧！' });
+    }
     if (event.type !== 'message' || event.message.type !== 'text') return;
 
-    if (event.message.text === '吃什麼') {
-        try {
-            const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, serviceAccountAuth);
-            await doc.loadInfo();
-            const sheet = doc.sheetsByIndex[0];
-            const rows = await sheet.getRows();
-            
-            if (rows.length === 0) return client.replyMessage(event.replyToken, { type: 'text', text: '試算表裡面沒有資料喔！' });
+    try {
+        const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, serviceAccountAuth);
+        await doc.loadInfo();
+        const rows = await doc.sheetsByIndex[0].getRows();
+        const msg = event.message.text;
+        let target;
 
-            // 隨機選一行並使用 _rawData 讀取陣列資料
-            const randomRow = rows[Math.floor(Math.random() * rows.length)];
-            const rowData = randomRow._rawData; 
-            
-            // rowData[0] 是第一欄, rowData[1] 是第二欄
-            const name = rowData[0] || '未知餐廳';
-            const location = rowData[1] || '未知地點';
+        if (msg === '吃什麼') {
+            target = rows[Math.floor(Math.random() * rows.length)];
+        } else if (msg.startsWith('找 ')) {
+            const kw = msg.split(' ')[1];
+            const filtered = rows.filter(r => r._rawData.join(',').includes(kw));
+            if (filtered.length === 0) return client.replyMessage(event.replyToken, { type: 'text', text: '抱歉，找不到該關鍵字的美食。' });
+            target = filtered[Math.floor(Math.random() * filtered.length)];
+        } else return;
 
-            return client.replyMessage(event.replyToken, {
-                type: 'text',
-                text: `推薦你吃：${name}\n地點在：${location}`
-            });
-        } catch (err) {
-            console.error('讀取失敗:', err);
-            return client.replyMessage(event.replyToken, { type: 'text', text: '讀取資料失敗，請檢查權限或試算表ID！' });
-        }
-    }
+        const d = target._rawData;
+        return client.replyMessage(event.replyToken, {
+            "type": "flex", "altText": d[0],
+            "contents": {
+                "type": "bubble",
+                "hero": { "type": "image", "url": d[2] || "https://i.imgur.com/O6Lq9i5.jpg", "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
+                "body": {
+                    "type": "box", "layout": "vertical",
+                    "contents": [
+                        { "type": "text", "text": d[0] || "未命名", "weight": "bold", "size": "xl" },
+                        { "type": "text", "text": "📍 " + (d[1] || "無地址"), "margin": "md", "size": "sm" },
+                        { "type": "text", "text": "💰 " + (d[3] || "未標示"), "margin": "sm", "size": "sm", "color": "#ff6b6b" }
+                    ]
+                }
+            }
+        });
+    } catch (e) { console.error(e); }
 }
-
-const port = process.env.PORT || 10000;
-app.listen(port, () => { console.log(`後端已在 Port ${port} 啟動！`); });
+app.listen(process.env.PORT || 10000);
