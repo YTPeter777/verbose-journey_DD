@@ -1,12 +1,10 @@
 const express = require('express');
 const line = require('@line/bot-sdk');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
-const { JWT } = require('google-auth-library');
 
-const app = express();
 const config = {
-    channelSecret: process.env.CHANNEL_SECRET,
-    channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN
+    channelSecret: process.env.CHANNEL_SECRET || 'dummy_secret',
+    channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN || 'dummy_token'
+};
 };
 
 const client = new line.Client(config);
