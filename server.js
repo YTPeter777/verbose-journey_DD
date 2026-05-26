@@ -38,9 +38,11 @@ async function handleEvent(event) {
             
             if (rows.length === 0) return client.replyMessage(event.replyToken, { type: 'text', text: '試算表裡面沒有資料喔！' });
 
-            // 改用索引方式讀取，避免名稱對應錯誤
+            // 隨機選一行並使用 _rawData 讀取陣列資料
             const randomRow = rows[Math.floor(Math.random() * rows.length)];
-            const rowData = randomRow.toArray(); 
+            const rowData = randomRow._rawData; 
+            
+            // rowData[0] 是第一欄, rowData[1] 是第二欄
             const name = rowData[0] || '未知餐廳';
             const location = rowData[1] || '未知地點';
 
@@ -50,7 +52,7 @@ async function handleEvent(event) {
             });
         } catch (err) {
             console.error('讀取失敗:', err);
-            return client.replyMessage(event.replyToken, { type: 'text', text: '讀取資料失敗，請檢查格式！' });
+            return client.replyMessage(event.replyToken, { type: 'text', text: '讀取資料失敗，請檢查權限或試算表ID！' });
         }
     }
 }
